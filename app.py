@@ -1,60 +1,99 @@
 from flask import Flask, jsonify, render_template, request
 import pymysql
+import os
 
 app = Flask(__name__)
 
+# ✅ Use Environment Variables for Security (Set these in your EC2 instance)
+DB_HOST = os.getenv("DB_HOST", "flask-mysql-db.czuqasgyocvc.eu-west-2.rds.amazonaws.com")
+DB_USER = os.getenv("DB_USER", "admin")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "123456789")  # ⚠️ Change this to an environment variable
+DB_NAME = os.getenv("DB_NAME", "flask_db")
+
 def get_db_connection():
-    connection = pymysql.connect(host='flask-mysql-db.czuqasgyocvc.eu-west-2.rds.amazonaws.com',  # Replace with your RDS endpoint
-                                 user='admin',      # Replace with your RDS username
-                                 password='123456789',  # Replace with your RDS password
-                                 db='flask_db',   # Replace with your database name
-                                 charset='utf8mb4',
-                                 cursorclass=pymysql.cursors.DictCursor)
-    return connection
+    """Create a MySQL database connection with error handling."""
+    try:
+        connection = pymysql.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            db=DB_NAME,
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        return connection
+    except Exception as e:
+        print(f"❌ Database connection error: {e}")
+        return None
 
 @app.route('/health')
 def health():
-    return "Up & Running"
+    return "✅ Up & Running"
 
 @app.route('/create_table')
 def create_table():
+    """Create a MySQL table if it doesn't exist."""
     connection = get_db_connection()
-    cursor = connection.cursor()
-    create_table_query = """
-        CREATE TABLE IF NOT EXISTS example_table (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(255) NOT NULL
-        )
-    """
-    cursor.execute(create_table_query)
-    connection.commit()
-    connection.close()
-    return "Table created successfully"
+    if connection is None:
+        return "❌ Failed to connect to database"
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS example_table (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL
+                )
+            """)
+            connection.commit()
+        return "✅ Table created successfully"
+    except Exception as e:
+        return f"❌ Error creating table: {e}"
+    finally:
+        connection.close()
 
 @app.route('/insert_record', methods=['POST'])
 def insert_record():
-    name = request.json['name']
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    insert_query = "INSERT INTO example_table (name) VALUES (%s)"
-    cursor.execute(insert_query, (name,))
-    connection.commit()
-    connection.close()
-    return "Record inserted successfully"
+    """Insert a new record into the MySQL table."""
+    data = request.get_json()
+    if "name" not in data:
+        return jsonify({"error": "Missing 'name' field"}), 400
 
-@app.route('/data')
+    connection = get_db_connection()
+    if connection is None:
+        return jsonify({"error": "Failed to connect to database"}), 500
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("INSERT INTO example_table (name) VALUES (%s)", (data["name"],))
+            connection.commit()
+        return jsonify({"message": "✅ Record inserted successfully!"}), 201
+    except Exception as e:
+        return jsonify({"error": f"❌ Error inserting record: {e}"}), 500
+    finally:
+        connection.close()
+
+@app.route('/data', methods=['GET'])
 def data():
+    """Retrieve all records from the MySQL table."""
     connection = get_db_connection()
-    cursor = connection.cursor()
-    cursor.execute('SELECT * FROM example_table')
-    result = cursor.fetchall()
-    connection.close()
-    return jsonify(result)
+    if connection is None:
+        return jsonify({"error": "Failed to connect to database"}), 500
 
-# UI route
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM example_table")
+            result = cursor.fetchall()
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": f"❌ Error fetching data: {e}"}), 500
+    finally:
+        connection.close()
+
 @app.route('/')
 def index():
+    """Render the UI."""
     return render_template('index.html')
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0') 
+    app.run(debug=True, host='0.0.0.0', port=5000)

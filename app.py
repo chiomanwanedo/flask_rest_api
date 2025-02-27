@@ -8,7 +8,7 @@ app = Flask(__name__)
 DB_HOST = os.getenv("DB_HOST", "flask-mysql-db.czuqasgyocvc.eu-west-2.rds.amazonaws.com")
 DB_USER = os.getenv("DB_USER", "admin")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "123456789")  # ⚠️ Change this to an environment variable
-DB_NAME = os.getenv("DB_NAME", "flask_db")
+DB_NAME = os.getenv("DB_NAME", "flask-mysql-db")
 
 def get_db_connection():
     """Create a MySQL database connection with error handling."""
@@ -17,7 +17,7 @@ def get_db_connection():
             host=DB_HOST,
             user=DB_USER,
             password=DB_PASSWORD,
-            db=DB_NAME,
+            db='flask-mysql-db',
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor
         )
